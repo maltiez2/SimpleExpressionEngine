@@ -4,7 +4,7 @@ using System.Text;
 
 namespace SimpleExpressionEngine;
 
-public class FloatTokenizer
+public class FloatTokenizer : ITokenizer<float>
 {
     private readonly TextReader mReader;
     private char mCurrentCharacter;
@@ -20,7 +20,7 @@ public class FloatTokenizer
     }
 
     public Token Token => mCurrentToken;
-    public float Number => mNumber;
+    public float Value => mNumber;
     public string Identifier => mIdentifier;
 
     public void NextToken()
@@ -32,7 +32,7 @@ public class FloatTokenizer
 
         if (ProcessSpecialSymbol()) return;
         if (ProcessDigit()) return;
-        if (ProcessIdentifier()) return;
+        _ = ProcessIdentifier();
     }
 
     private void NextChar()

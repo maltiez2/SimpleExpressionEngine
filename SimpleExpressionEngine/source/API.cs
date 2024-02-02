@@ -12,6 +12,15 @@ public interface INode<TOutput, TIntermediate, TInput>
     TOutput Evaluate(IContext<TIntermediate, TInput> context);
 }
 
+public interface ITokenizer<out TValue>
+{
+    void NextToken();
+
+    Token Token { get; }
+    TValue Value { get; }
+    string Identifier { get; }
+}
+
 public enum Token
 {
     EOF,
