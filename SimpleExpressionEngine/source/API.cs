@@ -1,17 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace SimpleExpressionEngine;
 
-public interface IContext
+public interface IContext<out TResult, in TArguments>
 {
-    double ResolveVariable(string name);
-    double CallFunction(string name, IEnumerable<double> arguments);
+    TResult Resolve(string name, params TArguments[] arguments);
 }
 
-public interface INode
+public interface INode<TOutput, TIntermediate, TInput>
 {
-    double Evaluate(IContext context);
+    TOutput Evaluate(IContext<TIntermediate, TInput> context);
 }
 
 public enum Token

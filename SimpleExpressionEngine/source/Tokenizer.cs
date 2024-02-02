@@ -2,134 +2,124 @@
 using System.IO;
 using System.Text;
 
-namespace SimpleExpressionEngine
+namespace SimpleExpressionEngine;
+
+public class FloatTokenizer
 {
-    public class Tokenizer
+    private readonly TextReader mReader;
+    private char mCurrentCharacter;
+    private Token mCurrentToken;
+    private float mNumber;
+    private string mIdentifier = "";
+
+    public FloatTokenizer(TextReader reader)
     {
-        public Tokenizer(TextReader reader)
+        mReader = reader;
+        NextChar();
+        NextToken();
+    }
+
+    public Token Token => mCurrentToken;
+    public float Number => mNumber;
+    public string Identifier => mIdentifier;
+
+    public void NextToken()
+    {
+        while (char.IsWhiteSpace(mCurrentCharacter))
         {
-            _reader = reader;
             NextChar();
-            NextToken();
         }
 
-        TextReader _reader;
-        char _currentChar;
-        Token _currentToken;
-        double _number;
-        string _identifier;
+        if (ProcessSpecialSymbol()) return;
+        if (ProcessDigit()) return;
+        if (ProcessIdentifier()) return;
+    }
 
-        public Token Token
-        {
-            get { return _currentToken; }
-        }
+    private void NextChar()
+    {
+        int character = mReader.Read();
+        mCurrentCharacter = character < 0 ? '\0' : (char)character;
+    }
 
-        public double Number
+    private bool ProcessSpecialSymbol()
+    {
+        switch (mCurrentCharacter)
         {
-            get { return _number; }
-        }
+            case '\0':
+                mCurrentToken = Token.EOF;
+                return true;
 
-        public string Identifier
-        {
-            get { return _identifier; }
-        }
-
-        // Read the next character from the input strem
-        // and store it in _currentChar, or load '\0' if EOF
-        void NextChar()
-        {
-            int ch = _reader.Read();
-            _currentChar = ch < 0 ? '\0' : (char)ch;
-        }
-
-        // Read the next token from the input stream
-        public void NextToken()
-        {
-            // Skip whitespace
-            while (char.IsWhiteSpace(_currentChar))
-            {
+            case '+':
                 NextChar();
-            }
+                mCurrentToken = Token.Add;
+                return true;
 
-            // Special characters
-            switch (_currentChar)
-            {
-                case '\0':
-                    _currentToken = Token.EOF;
-                    return;
+            case '-':
+                NextChar();
+                mCurrentToken = Token.Subtract;
+                return true;
 
-                case '+':
-                    NextChar();
-                    _currentToken = Token.Add;
-                    return;
+            case '*':
+                NextChar();
+                mCurrentToken = Token.Multiply;
+                return true;
 
-                case '-':
-                    NextChar();
-                    _currentToken = Token.Subtract;
-                    return;
+            case '/':
+                NextChar();
+                mCurrentToken = Token.Divide;
+                return true;
 
-                case '*':
-                    NextChar();
-                    _currentToken = Token.Multiply;
-                    return;
+            case '(':
+                NextChar();
+                mCurrentToken = Token.OpenParenthesis;
+                return true;
 
-                case '/':
-                    NextChar();
-                    _currentToken = Token.Divide;
-                    return;
+            case ')':
+                NextChar();
+                mCurrentToken = Token.CloseParenthesis;
+                return true;
 
-                case '(':
-                    NextChar();
-                    _currentToken = Token.OpenParenthesis;
-                    return;
-
-                case ')':
-                    NextChar();
-                    _currentToken = Token.CloseParenthesis;
-                    return;
-
-                case ',':
-                    NextChar();
-                    _currentToken = Token.Comma;
-                    return;
-            }
-
-            // Number?
-            if (char.IsDigit(_currentChar) || _currentChar =='.')
-            {
-                // Capture digits/decimal point
-                var sb = new StringBuilder();
-                bool haveDecimalPoint = false;
-                while (char.IsDigit(_currentChar) || (!haveDecimalPoint && _currentChar == '.'))
-                {
-                    sb.Append(_currentChar);
-                    haveDecimalPoint = _currentChar == '.';
-                    NextChar();
-                }
-
-                // Parse it
-                _number = double.Parse(sb.ToString(), CultureInfo.InvariantCulture);
-                _currentToken = Token.Number;
-                return;
-            }
-
-            // Identifier - starts with letter or underscore
-            if (char.IsLetter(_currentChar) || _currentChar == '_')
-            {
-                var sb = new StringBuilder();
-
-                // Accept letter, digit or underscore
-                while (char.IsLetterOrDigit(_currentChar) || _currentChar == '_')
-                {
-                    sb.Append(_currentChar);
-                    NextChar();
-                }
-
-                // Setup token
-                _identifier = sb.ToString();
-                _currentToken = Token.Identifier;
-                return;
-            }
+            case ',':
+                NextChar();
+                mCurrentToken = Token.Comma;
+                return true;
+            default:
+                return false;
         }
+    }
+
+    private bool ProcessDigit()
+    {
+        if (!char.IsDigit(mCurrentCharacter) && mCurrentCharacter != '.') return false;
+
+        StringBuilder numberString = new();
+        bool haveDecimalPoint = false;
+        while (char.IsDigit(mCurrentCharacter) || (!haveDecimalPoint && mCurrentCharacter == '.'))
+        {
+            numberString.Append(mCurrentCharacter);
+            haveDecimalPoint = mCurrentCharacter == '.';
+            NextChar();
+        }
+
+        mNumber = float.Parse(numberString.ToString(), CultureInfo.InvariantCulture);
+        mCurrentToken = Token.Number;
+        return true;
+    }
+
+    private bool ProcessIdentifier()
+    {
+        if (!char.IsLetter(mCurrentCharacter) && mCurrentCharacter != '_') return false;
+
+        StringBuilder identifier = new();
+
+        while (char.IsLetterOrDigit(mCurrentCharacter) || mCurrentCharacter == '_')
+        {
+            identifier.Append(mCurrentCharacter);
+            NextChar();
+        }
+
+        mIdentifier = identifier.ToString();
+        mCurrentToken = Token.Identifier;
+        return true;
     }
 }

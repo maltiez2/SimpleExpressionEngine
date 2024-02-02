@@ -2,230 +2,219 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace SimpleExpressionEngine
+namespace SimpleExpressionEngine;
+
+public class FloatParser
 {
-    public class Parser
+    private readonly FloatTokenizer mTokenizer;
+
+    public FloatParser(FloatTokenizer tokenizer)
     {
-        // Constructor - just store the tokenizer
-        public Parser(Tokenizer tokenizer)
+        mTokenizer = tokenizer;
+    }
+
+    public INode<float, float, float> ParseExpression()
+    {
+        INode<float, float, float> expression = ParseAddSubtract();
+
+        if (mTokenizer.Token != Token.EOF)
         {
-            _tokenizer = tokenizer;
+            throw new SyntaxException("Unexpected characters at end of expression");
         }
 
-        Tokenizer _tokenizer;
+        return expression;
+    }
 
-        // Parse an entire expression and check EOF was reached
-        public INode ParseExpression()
+    INode<float, float, float> ParseAddSubtract()
+    {
+        INode<float, float, float> leftOperand = ParseMultiplyDivide();
+
+        while (true)
         {
-            // For the moment, all we understand is add and subtract
-            var expr = ParseAddSubtract();
+            Func<float, float, float>? operation = null;
+            if (mTokenizer.Token == Token.Add)
+            {
+                operation = (a, b) => a + b;
+            }
+            else if (mTokenizer.Token == Token.Subtract)
+            {
+                operation = (a, b) => a - b;
+            }
 
-            // Check everything was consumed
-            if (_tokenizer.Token != Token.EOF)
-                throw new SyntaxException("Unexpected characters at end of expression");
+            if (operation == null) return leftOperand;
 
-            return expr;
+            mTokenizer.NextToken();
+            
+            INode<float, float, float> rightOperand = ParseMultiplyDivide();
+
+            leftOperand = new Nodes.Binary<float, float, float>(leftOperand, rightOperand, operation);
+        }
+    }
+
+    // Parse an sequence of add/subtract operators
+    INode<float, float, float> ParseMultiplyDivide()
+    {
+        // Parse the left hand side
+        INode<float, float, float> lhs = ParseUnary();
+
+        while (true)
+        {
+            // Work out the operator
+            Func<float, float, float> op = null;
+            if (mTokenizer.Token == Token.Multiply)
+            {
+                op = (a, b) => a * b;
+            }
+            else if (mTokenizer.Token == Token.Divide)
+            {
+                op = (a, b) => a / b;
+            }
+
+            // Binary operator found?
+            if (op == null)
+                return lhs;             // no
+
+            // Skip the operator
+            mTokenizer.NextToken();
+
+            // Parse the right hand side of the expression
+            INode<float, float, float> rhs = ParseUnary();
+
+            // Create a binary node and use it as the left-hand side from now on
+            lhs = new Nodes.Binary<float, float, float>(lhs, rhs, op);
+        }
+    }
+
+
+    // Parse a unary operator (eg: negative/positive)
+    INode<float, float, float> ParseUnary()
+    {
+        while (true)
+        {
+            // Positive operator is a no-op so just skip it
+            if (mTokenizer.Token == Token.Add)
+            {
+                // Skip
+                mTokenizer.NextToken();
+                continue;
+            }
+
+            // Negative operator
+            if (mTokenizer.Token == Token.Subtract)
+            {
+                // Skip
+                mTokenizer.NextToken();
+
+                // Parse RHS 
+                // Note this recurses to self to support negative of a negative
+                INode<float, float, float> rhs = ParseUnary();
+
+                // Create unary node
+                return new Nodes.Unary<float, float, float>(rhs, (a) => -a);
+            }
+
+            // No positive/negative operator so parse a leaf node
+            return ParseLeaf();
+        }
+    }
+
+    // Parse a leaf node
+    // (For the moment this is just a number)
+    INode<float, float, float> ParseLeaf()
+    {
+        // Is it a number?
+        if (mTokenizer.Token == Token.Number)
+        {
+            var node = new Nodes.Value<float, float, float>(mTokenizer.Number);
+            mTokenizer.NextToken();
+            return node;
         }
 
-        // Parse an sequence of add/subtract operators
-        INode ParseAddSubtract()
+        // Parenthesis?
+        if (mTokenizer.Token == Token.OpenParenthesis)
         {
-            // Parse the left hand side
-            var lhs = ParseMultiplyDivide();
+            // Skip '('
+            mTokenizer.NextToken();
 
-            while (true)
-            {
-                // Work out the operator
-                Func<double, double, double> op = null;
-                if (_tokenizer.Token == Token.Add)
-                {
-                    op = (a, b) => a + b;
-                }
-                else if (_tokenizer.Token == Token.Subtract)
-                {
-                    op = (a, b) => a - b;
-                }
+            // Parse a top-level expression
+            INode<float, float, float> node = ParseAddSubtract();
 
-                // Binary operator found?
-                if (op == null)
-                    return lhs;             // no
+            // Check and skip ')'
+            if (mTokenizer.Token != Token.CloseParenthesis)
+                throw new SyntaxException("Missing close parenthesis");
+            mTokenizer.NextToken();
 
-                // Skip the operator
-                _tokenizer.NextToken();
-
-                // Parse the right hand side of the expression
-                var rhs = ParseMultiplyDivide();
-
-                // Create a binary node and use it as the left-hand side from now on
-                lhs = new NodeBinary(lhs, rhs, op);
-            }
+            // Return
+            return node;
         }
 
-        // Parse an sequence of add/subtract operators
-        INode ParseMultiplyDivide()
+        // Variable
+        if (mTokenizer.Token == Token.Identifier)
         {
-            // Parse the left hand side
-            var lhs = ParseUnary();
+            // Capture the name and skip it
+            string name = mTokenizer.Identifier;
+            mTokenizer.NextToken();
 
-            while (true)
+            // Parens indicate a function call, otherwise just a variable
+            if (mTokenizer.Token != Token.OpenParenthesis)
             {
-                // Work out the operator
-                Func<double, double, double> op = null;
-                if (_tokenizer.Token == Token.Multiply)
-                {
-                    op = (a, b) => a * b;
-                }
-                else if (_tokenizer.Token == Token.Divide)
-                {
-                    op = (a, b) => a / b;
-                }
-
-                // Binary operator found?
-                if (op == null)
-                    return lhs;             // no
-
-                // Skip the operator
-                _tokenizer.NextToken();
-
-                // Parse the right hand side of the expression
-                var rhs = ParseUnary();
-
-                // Create a binary node and use it as the left-hand side from now on
-                lhs = new NodeBinary(lhs, rhs, op);
+                // Variable
+                return new Nodes.Variable<float, float>(name);
             }
-        }
-
-
-        // Parse a unary operator (eg: negative/positive)
-        INode ParseUnary()
-        {
-            while (true)
+            else
             {
-                // Positive operator is a no-op so just skip it
-                if (_tokenizer.Token == Token.Add)
+                // Function call
+
+                // Skip parens
+                mTokenizer.NextToken();
+
+                // Parse arguments
+                List<SimpleExpressionEngine.INode<float, float, float>> arguments = new();
+                while (true)
                 {
-                    // Skip
-                    _tokenizer.NextToken();
-                    continue;
-                }
+                    // Parse argument and add to list
+                    arguments.Add(ParseAddSubtract());
 
-                // Negative operator
-                if (_tokenizer.Token == Token.Subtract)
-                {
-                    // Skip
-                    _tokenizer.NextToken();
-
-                    // Parse RHS 
-                    // Note this recurses to self to support negative of a negative
-                    var rhs = ParseUnary();
-
-                    // Create unary node
-                    return new NodeUnary(rhs, (a) => -a);
-                }
-
-                // No positive/negative operator so parse a leaf node
-                return ParseLeaf();
-            }
-        }
-
-        // Parse a leaf node
-        // (For the moment this is just a number)
-        INode ParseLeaf()
-        {
-            // Is it a number?
-            if (_tokenizer.Token == Token.Number)
-            {
-                var node = new NodeNumber(_tokenizer.Number);
-                _tokenizer.NextToken();
-                return node;
-            }
-
-            // Parenthesis?
-            if (_tokenizer.Token == Token.OpenParenthesis)
-            {
-                // Skip '('
-                _tokenizer.NextToken();
-
-                // Parse a top-level expression
-                var node = ParseAddSubtract();
-
-                // Check and skip ')'
-                if (_tokenizer.Token != Token.CloseParenthesis)
-                    throw new SyntaxException("Missing close parenthesis");
-                _tokenizer.NextToken();
-
-                // Return
-                return node;
-            }
-
-            // Variable
-            if (_tokenizer.Token == Token.Identifier)
-            {
-                // Capture the name and skip it
-                var name = _tokenizer.Identifier;
-                _tokenizer.NextToken();
-
-                // Parens indicate a function call, otherwise just a variable
-                if (_tokenizer.Token != Token.OpenParenthesis)
-                {
-                    // Variable
-                    return new NodeVariable(name);
-                }
-                else
-                {
-                    // Function call
-
-                    // Skip parens
-                    _tokenizer.NextToken();
-
-                    // Parse arguments
-                    var arguments = new List<INode>();
-                    while (true)
+                    // Is there another argument?
+                    if (mTokenizer.Token == Token.Comma)
                     {
-                        // Parse argument and add to list
-                        arguments.Add(ParseAddSubtract());
-
-                        // Is there another argument?
-                        if (_tokenizer.Token == Token.Comma)
-                        {
-                            _tokenizer.NextToken();
-                            continue;
-                        }
-
-                        // Get out
-                        break;
+                        mTokenizer.NextToken();
+                        continue;
                     }
 
-                    // Check and skip ')'
-                    if (_tokenizer.Token != Token.CloseParenthesis)
-                        throw new SyntaxException("Missing close parenthesis");
-                    _tokenizer.NextToken();
-
-                    // Create the function call node
-                    return new NodeFunctionCall(name, arguments.ToArray());
+                    // Get out
+                    break;
                 }
+
+                // Check and skip ')'
+                if (mTokenizer.Token != Token.CloseParenthesis)
+                    throw new SyntaxException("Missing close parenthesis");
+                mTokenizer.NextToken();
+
+                // Create the function call node
+                return new Nodes.FunctionCall<float, float>(name, arguments.ToArray());
             }
-
-            // Don't Understand
-            throw new SyntaxException($"Unexpect token: {_tokenizer.Token}");
         }
 
-
-        #region Convenience Helpers
-        
-        // Static helper to parse a string
-        public static INode Parse(string str)
-        {
-            return Parse(new Tokenizer(new StringReader(str)));
-        }
-
-        // Static helper to parse from a tokenizer
-        public static INode Parse(Tokenizer tokenizer)
-        {
-            var parser = new Parser(tokenizer);
-            return parser.ParseExpression();
-        }
-
-        #endregion
+        // Don't Understand
+        throw new SyntaxException($"Unexpect token: {mTokenizer.Token}");
     }
+
+
+    #region Convenience Helpers
+
+    // Static helper to parse a string
+    public static INode<float, float, float> Parse(string str)
+    {
+        return Parse(new FloatTokenizer(new StringReader(str)));
+    }
+
+    // Static helper to parse from a tokenizer
+    public static INode<float, float, float> Parse(FloatTokenizer tokenizer)
+    {
+        FloatParser parser = new(tokenizer);
+        return parser.ParseExpression();
+    }
+
+    #endregion
 }
