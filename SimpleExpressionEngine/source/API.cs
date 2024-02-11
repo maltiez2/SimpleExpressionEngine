@@ -5,6 +5,7 @@ namespace SimpleExpressionEngine;
 public interface IContext<out TResult, in TArguments>
 {
     TResult Resolve(string name, params TArguments[] arguments);
+    bool Resolvable(string name);
 }
 
 public interface INode<TOutput, TIntermediate, TInput>

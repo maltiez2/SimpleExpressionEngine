@@ -8,6 +8,8 @@ public class FloatTokenizer : ITokenizer<float>
 {
     private readonly TextReader mReader;
     private char mCurrentCharacter;
+    private char mPreviousCharacter = '\0';
+    private char mBeforePreviousCharacter = '\0';
     private Token mCurrentToken;
     private float mNumber;
     private string mIdentifier = "";
@@ -37,8 +39,14 @@ public class FloatTokenizer : ITokenizer<float>
 
     private void NextChar()
     {
-        int character = mReader.Read();
-        mCurrentCharacter = character < 0 ? '\0' : (char)character;
+        int code = mReader.Read();
+        char character = code < 0 ? '\0' : (char)code;
+        if (!char.IsWhiteSpace(character))
+        {
+            if (!char.IsWhiteSpace(mPreviousCharacter)) mBeforePreviousCharacter = mPreviousCharacter;
+            if (!char.IsWhiteSpace(mCurrentCharacter)) mPreviousCharacter = mCurrentCharacter;
+        }
+        mCurrentCharacter = character;
     }
 
     private bool ProcessSpecialSymbol()
@@ -50,11 +58,19 @@ public class FloatTokenizer : ITokenizer<float>
                 return true;
 
             case '+':
+                if (mPreviousCharacter == 'E' && char.IsDigit(mBeforePreviousCharacter))
+                {
+                    return false;
+                }
                 NextChar();
                 mCurrentToken = Token.Add;
                 return true;
 
             case '-':
+                if (mPreviousCharacter == 'E' && char.IsDigit(mBeforePreviousCharacter))
+                {
+                    return false;
+                }
                 NextChar();
                 mCurrentToken = Token.Subtract;
                 return true;
@@ -90,11 +106,22 @@ public class FloatTokenizer : ITokenizer<float>
 
     private bool ProcessDigit()
     {
-        if (!char.IsDigit(mCurrentCharacter) && mCurrentCharacter != '.') return false;
+        if (
+            !char.IsDigit(mCurrentCharacter) && mCurrentCharacter != '.' ||
+            !char.IsDigit(mPreviousCharacter) && mCurrentCharacter == 'E' ||
+            mCurrentCharacter == '-' && mPreviousCharacter != 'E' ||
+            mCurrentCharacter == '+' && mPreviousCharacter != 'E'
+        ) return false;
 
         StringBuilder numberString = new();
         bool haveDecimalPoint = false;
-        while (char.IsDigit(mCurrentCharacter) || (!haveDecimalPoint && mCurrentCharacter == '.'))
+        while (
+            char.IsDigit(mCurrentCharacter) || 
+            !haveDecimalPoint && mCurrentCharacter == '.' ||
+            mCurrentCharacter == 'E' ||
+            mPreviousCharacter == 'E' && mCurrentCharacter == '-' ||
+            mPreviousCharacter == 'E' && mCurrentCharacter == '+'
+        )
         {
             numberString.Append(mCurrentCharacter);
             haveDecimalPoint = mCurrentCharacter == '.';

@@ -11,6 +11,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Properties\**" />
+    <EmbeddedResource Remove="Properties\**" />
+    <None Remove="Properties\**" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="0Harmony">
         <HintPath>$(VINTAGE_STORY)\Lib\0Harmony.dll</HintPath>
 		<Private>False</Private>
